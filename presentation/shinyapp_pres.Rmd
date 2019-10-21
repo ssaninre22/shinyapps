@@ -1,0 +1,97 @@
+---
+title: "Housing Bubble Shiny App"
+author: "Sebastian Sanin"
+date: "20/10/2019"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Objective
+This presentation shows the use of my new Shiny app: *Housing Bubbles and Crises periods around the Globe*
+
+<div align="center">
+<img src=fig/app1.png width=600 height=300>
+</div>
+
+This app shows the housing bubble periods for different countries and plots the price indicators with bubbles as shaded areas.
+
+The app is completely functional. When bubbles are not identified nor table nor plot is depicted and an error appears. Change your country or indicator selection in this case.
+
+## Usage of the App
+In order to compute housing bubble periods you will have to choose the following two variables:
+
+- **Country**: From the list you need to select the country code that you want to work with.
+- **Indicator**: From the list you have two choose between Real house price index (rhpi) and Real house price to disposable income index (rhpi_rpdi).
+
+Finally you have to click on the **Plot Bubbles** button and wait some seconds.
+
+## Example
+Suppose you select **Country:** *WRD* that refers to world and **Indicator:** *rhpi_rpdi* that refers to real house price to disposable income index. You will obtain:
+
+```{r, echo=F}
+suppressPackageStartupMessages(suppressWarnings(library(scales)))
+suppressPackageStartupMessages(suppressWarnings(library(plyr)))
+suppressPackageStartupMessages(suppressWarnings(library(dplyr)))
+suppressPackageStartupMessages(suppressWarnings(library(data.table)))
+suppressPackageStartupMessages(suppressWarnings(library(ggplot2)))
+suppressPackageStartupMessages(suppressWarnings(library(plotly)))
+suppressPackageStartupMessages(suppressWarnings(library(psymonitor)))
+
+ctrycodes <- data.table(read.csv("country_codes.csv",sep=";"))
+df <- data.table(read.csv("bubble_file_new.csv",sep=";",
+                          colClasses = c("POSIXct",rep("factor",5),"numeric")))
+df$date <- as.Date(df$date)
+
+indicator <- "rhpi_rpdi"
+ctry <- "WRD"
+
+df2 <- df[variable==indicator&country==ctry,]
+
+y        <- df2$value
+obs      <- length(y)
+swindow0 <- floor(obs*(0.01 + 1.8/sqrt(obs)))
+dim      <- obs - swindow0 + 1
+Tb       <- 24 + swindow0 - 1
+# Estimate PSY statistics and CVs
+bsadf          <- PSY(y, swindow0)
+quantilesBsadf <- cvPSYwmboot(y, swindow0, Tb=Tb, nboot = 50, nCores = 2)
+quantile95     <- quantilesBsadf %*% matrix(1, nrow = 1, ncol = dim)
+# locate bubble/crisis dates
+ind95        <- (bsadf > t(quantile95[3, ])) * 1
+monitorDates <- df2$date[swindow0:obs]
+OT           <- locate(ind95, monitorDates)
+# Show bubble/crisis periods
+datebub <- disp(OT, obs)
+t(datebub)
+```
+
+
+```{r, echo=F, fig.width = 4,fig.height=3}
+# Graphics
+ggplot(df2)+geom_line(aes(x=as.Date(date),y=value))+
+  geom_rect(data=datebub,aes(xmin=as.Date(start),xmax=as.Date(end)),ymin=-Inf,ymax=Inf,alpha=0.3,fill="red")+
+  scale_x_date(labels=date_format ("%Y-%m"),breaks=date_breaks("4 year"))+  
+  scale_y_continuous(limits = c(min(df2$value)-20,max(df2$value)+20))+
+  theme_bw()+labs(title=paste("Housing bubbles or crises in: ",ctrycodes[country_code==ctry,country_name],sep=""),
+                  x="",y=ifelse(indicator=="rhpi_rpdi","Real house price to income index","Real house price index"))+
+  theme(axis.text.x = element_text(angle = 90))
+
+```
+
+## Results
+The resulting Bubble/Crisis Periods table shows the *start* and *end* of these events.
+<div align="center">
+<img src=fig/app2.png width=600 height=300>
+</div>
+In the lower part you will see a plot of the selected indicator and the bubble period in a light-red shaded area.
+<a href='https://ssaninre22.shinyapps.io/HousePriceBubbleApp/' title=''>My app</a>
+
+**THANKS FOR YOUR ATTENTION AND ENJOY MY APP**
+
+
+
+
+
